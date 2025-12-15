@@ -3,6 +3,7 @@ LinkedIn Job Scraper - Main scraper class for login and job search functionality
 """
 import time
 import os
+from urllib.parse import quote
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -18,14 +19,23 @@ class LinkedInScraper:
     """Scraper class for LinkedIn job search"""
     
     LINKEDIN_LOGIN_URL = "https://www.linkedin.com/login"
-    LINKEDIN_JOBS_URL = "https://www.linkedin.com/jobs/search/?f_TPR=r3600&keywords=software%20developer"
+    LINKEDIN_JOBS_BASE_URL = "https://www.linkedin.com/jobs/search/"
     
-    def __init__(self, headless=False):
-        """Initialize the scraper with Chrome WebDriver"""
+    def __init__(self, headless=False, job_title="software developer", time_seconds=3600):
+        """
+        Initialize the scraper with Chrome WebDriver
+        
+        Args:
+            headless: Run browser without GUI
+            job_title: Job title/keywords to search (e.g., "software developer", "data engineer")
+            time_seconds: Time filter in seconds (3600 = 1 hour, 86400 = 24 hours)
+        """
         load_dotenv()
         
         self.email = os.getenv("LINKEDIN_EMAIL")
         self.password = os.getenv("LINKEDIN_PASSWORD")
+        self.job_title = job_title
+        self.time_seconds = time_seconds
         
         if not self.email or not self.password:
             raise ValueError("LINKEDIN_EMAIL and LINKEDIN_PASSWORD must be set in .env file")
@@ -109,10 +119,17 @@ class LinkedInScraper:
             print(f"Login failed with error: {e}")
             return False
     
+    def _build_jobs_url(self):
+        """Build the LinkedIn jobs URL with dynamic parameters"""
+        encoded_title = quote(self.job_title)
+        return f"{self.LINKEDIN_JOBS_BASE_URL}?f_TPR=r{self.time_seconds}&keywords={encoded_title}"
+    
     def search_jobs(self):
         """Navigate to the job search page with filters applied"""
-        print(f"Navigating to job search page...")
-        self.driver.get(self.LINKEDIN_JOBS_URL)
+        jobs_url = self._build_jobs_url()
+        print(f"Searching for: '{self.job_title}' (last {self.time_seconds} seconds)")
+        print(f"URL: {jobs_url}")
+        self.driver.get(jobs_url)
         time.sleep(3)
         
         # Wait for job listings to load

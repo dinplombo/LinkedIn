@@ -1,17 +1,20 @@
 """
 LinkedIn Job Scraper - Main entry point
-Scrapes software developer jobs from LinkedIn posted in the last hour
+Scrapes jobs from LinkedIn based on configurable job title and time filter
 """
 import json
 import time
+import argparse
 from linkedin_scraper import LinkedInScraper
 from job_parser import extract_required_years, parse_job_data
 
 
-def main():
+def main(job_title="software developer", time_seconds=3600):
     """Main function to orchestrate the LinkedIn job scraping"""
     print("=" * 60)
-    print("LinkedIn Job Scraper - Software Developer Jobs (Last Hour)")
+    print(f"LinkedIn Job Scraper")
+    print(f"Job Title: {job_title}")
+    print(f"Time Filter: {time_seconds} seconds ({time_seconds // 3600}h {(time_seconds % 3600) // 60}m)")
     print("=" * 60)
     
     scraper = None
@@ -20,7 +23,7 @@ def main():
     try:
         # Initialize scraper (set headless=True for no browser window)
         print("\n[1/5] Initializing browser...")
-        scraper = LinkedInScraper(headless=False)
+        scraper = LinkedInScraper(headless=False, job_title=job_title, time_seconds=time_seconds)
         
         # Login to LinkedIn
         print("\n[2/5] Logging into LinkedIn...")
@@ -32,7 +35,7 @@ def main():
         time.sleep(3)
         
         # Navigate to job search
-        print("\n[3/5] Searching for Software Developer jobs (last hour)...")
+        print(f"\n[3/5] Searching for '{job_title}' jobs...")
         if not scraper.search_jobs():
             print("ERROR: Failed to load job search page")
             return
@@ -116,15 +119,15 @@ def test_login_only():
             scraper.close()
 
 
-def test_job_search():
+def test_job_search(job_title="software developer", time_seconds=3600):
     """Test login and job search without extracting all details"""
     print("=" * 60)
-    print("Testing LinkedIn Job Search")
+    print(f"Testing LinkedIn Job Search: '{job_title}' (last {time_seconds}s)")
     print("=" * 60)
     
     scraper = None
     try:
-        scraper = LinkedInScraper(headless=False)
+        scraper = LinkedInScraper(headless=False, job_title=job_title, time_seconds=time_seconds)
         
         # Login
         print("\n[1/3] Logging in...")
@@ -164,18 +167,37 @@ def test_job_search():
 
 
 if __name__ == "__main__":
-    import sys
+    parser = argparse.ArgumentParser(
+        description="LinkedIn Job Scraper - Scrape jobs based on title and time filter",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python main.py --title "software developer" --time 3600
+  python main.py --title "data engineer" --time 86400
+  python main.py login
+  python main.py search --title "python developer"
+  
+Time filter values:
+  3600   = 1 hour
+  86400  = 24 hours
+  604800 = 1 week
+        """
+    )
     
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "login":
-            test_login_only()
-        elif sys.argv[1] == "search":
-            test_job_search()
-        else:
-            print("Usage: python main.py [login|search]")
-            print("  login  - Test login only")
-            print("  search - Test login and job search")
-            print("  (no args) - Full scrape with job details")
+    parser.add_argument("command", nargs="?", default="run",
+                        choices=["run", "login", "search"],
+                        help="Command to execute (default: run)")
+    parser.add_argument("--title", "-t", type=str, default="software developer",
+                        help="Job title to search (default: 'software developer')")
+    parser.add_argument("--time", "-s", type=int, default=3600,
+                        help="Time filter in seconds (default: 3600 = 1 hour)")
+    
+    args = parser.parse_args()
+    
+    if args.command == "login":
+        test_login_only()
+    elif args.command == "search":
+        test_job_search(job_title=args.title, time_seconds=args.time)
     else:
-        main()
+        main(job_title=args.title, time_seconds=args.time)
 
