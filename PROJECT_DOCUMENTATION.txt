@@ -1,0 +1,503 @@
+================================================================================
+                    LINKEDIN JOB SCRAPER - PROJECT DOCUMENTATION
+================================================================================
+
+Project Name: LinkedIn Job Scraper
+Purpose: Automatically scrape job listings from LinkedIn based on job title 
+         and time filters, extracting job details and required years of experience.
+
+================================================================================
+                              PROJECT ARCHITECTURE
+================================================================================
+
+    +-------------------+
+    |      .env         |  (Credentials)
+    +-------------------+
+            |
+            v
+    +-------------------+
+    |     main.py       |  (Entry Point & Orchestrator)
+    +-------------------+
+            |
+            +---------------------------+
+            |                           |
+            v                           v
+    +-------------------+     +-------------------+
+    | linkedin_scraper  |     |   job_parser.py   |
+    |       .py         |     | (Text Processing) |
+    | (Browser Control) |     +-------------------+
+    +-------------------+
+            |
+            v
+    +-------------------+
+    |    jobs.json      |  (Output)
+    +-------------------+
+
+
+Data Flow:
+1. main.py reads credentials from .env
+2. main.py initializes LinkedInScraper
+3. LinkedInScraper logs into LinkedIn and searches for jobs
+4. Job data is extracted and passed to job_parser for experience extraction
+5. Results are saved to jobs.json
+
+================================================================================
+                              FILE STRUCTURE
+================================================================================
+
+Linkdin/
+|-- .env                    # LinkedIn credentials (EMAIL and PASSWORD)
+|-- .gitignore              # Git ignore file (excludes .env, jobs.json, etc.)
+|-- requirements.txt        # Python dependencies
+|-- main.py                 # Entry point - command line interface
+|-- linkedin_scraper.py     # Core scraper class with Selenium automation
+|-- job_parser.py           # Text parsing utilities for experience extraction
+|-- jobs.json               # Output file (generated after running)
+|-- PROJECT_DOCUMENTATION.txt  # This file
+
+================================================================================
+                              FILE: .env
+================================================================================
+
+Purpose: Store LinkedIn login credentials securely
+
+Format:
+    LINKEDIN_EMAIL=your_email@example.com
+    LINKEDIN_PASSWORD=your_password
+
+Note: This file is excluded from git via .gitignore for security
+
+================================================================================
+                              FILE: requirements.txt
+================================================================================
+
+Purpose: List of Python package dependencies
+
+Dependencies:
+    - selenium          : Browser automation framework
+    - python-dotenv     : Load environment variables from .env file
+    - webdriver-manager : Automatic ChromeDriver management
+
+Installation:
+    pip install -r requirements.txt
+
+================================================================================
+                              FILE: main.py
+================================================================================
+
+Purpose: Entry point and orchestrator for the LinkedIn job scraper
+
+--------------------------------------------------------------------------------
+FUNCTIONS:
+--------------------------------------------------------------------------------
+
+1. main(job_title, time_seconds)
+   ---------------------------------
+   Purpose: Main orchestration function that runs the complete scraping workflow
+   
+   Parameters:
+     - job_title (str): Job title to search (default: "software developer")
+     - time_seconds (int): Time filter in seconds (default: 3600 = 1 hour)
+   
+   Workflow:
+     [1/5] Initialize browser with LinkedInScraper
+     [2/5] Login to LinkedIn
+     [3/5] Navigate to job search with filters
+     [4/5] Scroll to load all job listings
+     [5/5] Extract job data and required years for each job
+     Save results to jobs.json
+   
+   Returns: None (saves results to file)
+
+
+2. test_login_only()
+   -------------------
+   Purpose: Test function to verify LinkedIn login works
+   
+   Parameters: None
+   
+   Workflow:
+     - Initialize scraper
+     - Attempt login
+     - Print success/failure status
+   
+   Returns: bool (True if login successful)
+
+
+3. test_job_search(job_title, time_seconds)
+   ------------------------------------------
+   Purpose: Test login and job search without extracting full details
+   
+   Parameters:
+     - job_title (str): Job title to search
+     - time_seconds (int): Time filter in seconds
+   
+   Workflow:
+     [1/3] Login to LinkedIn
+     [2/3] Navigate to job search
+     [3/3] Get job listings (without detailed extraction)
+   
+   Returns: None
+
+
+4. Command Line Interface (if __name__ == "__main__")
+   ---------------------------------------------------
+   Purpose: Parse command line arguments and execute appropriate function
+   
+   Commands:
+     - run (default): Full scrape with job details
+     - login: Test login only
+     - search: Test search without full details
+   
+   Arguments:
+     --title, -t : Job title to search (default: "software developer")
+     --time, -s  : Time filter in seconds (default: 3600)
+   
+   Examples:
+     python main.py --title "software developer" --time 3600
+     python main.py --title "data engineer" --time 86400
+     python main.py login
+     python main.py search --title "python developer"
+
+================================================================================
+                              FILE: linkedin_scraper.py
+================================================================================
+
+Purpose: Core scraper class using Selenium for browser automation
+
+--------------------------------------------------------------------------------
+CLASS: LinkedInScraper
+--------------------------------------------------------------------------------
+
+Class Constants:
+  - LINKEDIN_LOGIN_URL: "https://www.linkedin.com/login"
+  - LINKEDIN_JOBS_BASE_URL: "https://www.linkedin.com/jobs/search/"
+
+--------------------------------------------------------------------------------
+METHODS:
+--------------------------------------------------------------------------------
+
+1. __init__(self, headless, job_title, time_seconds)
+   --------------------------------------------------
+   Purpose: Initialize the scraper with Chrome WebDriver
+   
+   Parameters:
+     - headless (bool): Run browser without GUI (default: False)
+     - job_title (str): Job title to search (default: "software developer")
+     - time_seconds (int): Time filter in seconds (default: 3600)
+   
+   Actions:
+     - Load environment variables from .env
+     - Configure Chrome options (anti-detection settings)
+     - Initialize Chrome WebDriver
+     - Set up WebDriverWait for element waiting
+   
+   Raises: ValueError if credentials not found in .env
+
+
+2. login(self)
+   ------------
+   Purpose: Log into LinkedIn using credentials from .env
+   
+   Parameters: None
+   
+   Workflow:
+     1. Navigate to LinkedIn login page
+     2. Enter email address
+     3. Enter password
+     4. Click submit button
+     5. Handle security challenges if needed
+   
+   Returns: bool (True if login successful)
+
+
+3. _build_jobs_url(self) [Private]
+   --------------------------------
+   Purpose: Build the LinkedIn jobs search URL with dynamic parameters
+   
+   Parameters: None
+   
+   URL Format: 
+     https://www.linkedin.com/jobs/search/?f_TPR=r{time_seconds}&keywords={job_title}
+   
+   Returns: str (complete URL with filters)
+
+
+4. search_jobs(self)
+   ------------------
+   Purpose: Navigate to the job search page with filters applied
+   
+   Parameters: None
+   
+   Workflow:
+     1. Build URL using _build_jobs_url()
+     2. Navigate to the URL
+     3. Wait for job listings to load
+   
+   Returns: bool (True if page loaded successfully)
+
+
+5. scroll_job_list(self)
+   ----------------------
+   Purpose: Scroll through the job list to load all lazy-loaded jobs
+   
+   Parameters: None
+   
+   Workflow:
+     1. Find the jobs list container
+     2. Scroll down repeatedly until no new content loads
+     3. Maximum 10 scroll attempts
+   
+   Returns: None
+
+
+6. get_job_listings(self)
+   -----------------------
+   Purpose: Extract all job listings from the current page
+   
+   Parameters: None
+   
+   Workflow:
+     1. Find all job card elements
+     2. Extract data from each card using _extract_job_from_card()
+     3. Filter duplicates using seen_job_ids set
+     4. Print statistics (valid, duplicates, skipped)
+   
+   Returns: list of dict (job data: job_id, link, job_title, required_years)
+
+
+7. _extract_job_from_card(self, card) [Private]
+   ---------------------------------------------
+   Purpose: Extract job data from a single job card element
+   
+   Parameters:
+     - card: Selenium WebElement representing a job card
+   
+   Extraction Process:
+     1. Get job_id from data attributes or URL
+     2. Build job link
+     3. Extract job title using multiple CSS selectors
+     4. Set required_years as "Not specified" (extracted later)
+   
+   Returns: dict or None (job data or None if extraction failed)
+
+
+8. get_job_details(self, job_id)
+   ------------------------------
+   Purpose: Click on a job and extract the full description
+   
+   Parameters:
+     - job_id (str): LinkedIn job ID
+   
+   Workflow:
+     1. Try to find and click the job card
+     2. If not found, navigate directly to job URL
+     3. Wait for job details to load
+     4. Extract job description text
+   
+   Returns: str (job description text)
+
+
+9. get_job_title_from_page(self)
+   ------------------------------
+   Purpose: Extract job title from the currently open job page
+   
+   Parameters: None
+   
+   Use Case: When job title couldn't be extracted from card, 
+             get it from the job details page instead
+   
+   Returns: str or None (job title or None if not found)
+
+
+10. close(self)
+    -----------
+    Purpose: Close the browser and clean up
+    
+    Parameters: None
+    
+    Returns: None
+
+
+--------------------------------------------------------------------------------
+STANDALONE FUNCTION:
+--------------------------------------------------------------------------------
+
+test_login()
+------------
+Purpose: Standalone test function to verify login functionality
+
+Workflow:
+  1. Create LinkedInScraper instance
+  2. Attempt login
+  3. Print result
+  4. Wait for user input before closing
+
+Returns: bool (login success status)
+
+================================================================================
+                              FILE: job_parser.py
+================================================================================
+
+Purpose: Text processing utilities to extract experience requirements from 
+         job descriptions
+
+--------------------------------------------------------------------------------
+FUNCTIONS:
+--------------------------------------------------------------------------------
+
+1. extract_required_years(description)
+   ------------------------------------
+   Purpose: Extract required years of experience from job description text
+   
+   Parameters:
+     - description (str): Full job description text
+   
+   Regex Patterns Matched:
+     - "5+ years" / "5 + years" / "5+ yrs"
+     - "3-5 years" / "3 - 5 years" / "3 to 5 years"
+     - "minimum 3 years" / "at least 5 years"
+     - "5 years of experience" / "5 years experience"
+     - "experience: 5 years"
+     - "5 years' experience"
+     - General "X years" pattern
+   
+   Returns: str
+     - "X+ years" (e.g., "5+ years")
+     - "X-Y years" (e.g., "3-5 years")
+     - "X years" (e.g., "5 years")
+     - "Not specified" (if no match found)
+   
+   Example:
+     Input:  "Looking for a developer with 5+ years of experience"
+     Output: "5+ years"
+
+
+--------------------------------------------------------------------------------
+TEST BLOCK (if __name__ == "__main__"):
+--------------------------------------------------------------------------------
+
+Purpose: Test the extract_required_years function with sample descriptions
+
+Test Cases:
+  - "5+ years of experience"
+  - "3-5 years of software development"
+  - "Minimum 2 years"
+  - "At least 7 years"
+  - "5 years of experience"
+  - "Experience: 3 years"
+  - No experience mentioned
+  - "4+ yrs of experience"
+  - "8 to 10 years"
+
+================================================================================
+                              OUTPUT: jobs.json
+================================================================================
+
+Purpose: JSON file containing all scraped job data
+
+Format:
+[
+  {
+    "job_id": "4350201795",
+    "link": "https://www.linkedin.com/jobs/view/4350201795",
+    "job_title": "Software Developer",
+    "required_years": "3+ years"
+  },
+  ...
+]
+
+Fields:
+  - job_id: Unique LinkedIn job identifier
+  - link: Direct URL to the job posting
+  - job_title: Job position title
+  - required_years: Extracted experience requirement
+
+================================================================================
+                              USAGE EXAMPLES
+================================================================================
+
+1. Basic Usage (software developer, last 1 hour):
+   python main.py
+
+2. Custom Job Title:
+   python main.py --title "data engineer"
+   python main.py -t "python developer"
+
+3. Custom Time Filter:
+   python main.py --time 3600      # 1 hour
+   python main.py --time 7200      # 2 hours
+   python main.py --time 86400     # 24 hours
+   python main.py -s 604800        # 1 week
+
+4. Combined:
+   python main.py --title "software developer" --time 300
+   python main.py -t "full stack developer" -s 3600
+
+5. Test Commands:
+   python main.py login            # Test login only
+   python main.py search           # Test search without full extraction
+
+================================================================================
+                              TIME FILTER REFERENCE
+================================================================================
+
+Seconds  | Duration
+---------|----------
+300      | 5 minutes
+600      | 10 minutes
+1800     | 30 minutes
+3600     | 1 hour
+7200     | 2 hours
+14400    | 4 hours
+43200    | 12 hours
+86400    | 24 hours (1 day)
+604800   | 1 week
+2592000  | 30 days
+
+================================================================================
+                              SECURITY NOTES
+================================================================================
+
+1. The .env file contains sensitive credentials and is excluded from git
+2. Never commit .env or jobs.json to version control
+3. LinkedIn may detect and block automated access
+4. Use responsibly and respect LinkedIn's Terms of Service
+5. Consider changing your password if credentials were shared
+
+================================================================================
+                              DEPENDENCIES
+================================================================================
+
+Python Version: 3.7+
+
+Package          | Version  | Purpose
+-----------------|----------|------------------------------------------
+selenium         | 4.16.0+  | Browser automation
+python-dotenv    | 1.0.0+   | Environment variable management
+webdriver-manager| 4.0.1+   | Automatic ChromeDriver installation
+
+================================================================================
+                              TROUBLESHOOTING
+================================================================================
+
+1. "WebDriver Manager failed" error:
+   - The script will fallback to system Chrome
+   - Ensure Chrome browser is installed
+
+2. Login fails with security challenge:
+   - Complete the CAPTCHA/verification manually
+   - Press Enter when prompted to continue
+
+3. No jobs found:
+   - Try increasing the time filter
+   - Check if the job title has results on LinkedIn
+
+4. Missing credentials error:
+   - Ensure .env file exists in project root
+   - Check LINKEDIN_EMAIL and LINKEDIN_PASSWORD are set
+
+================================================================================
+                         END OF DOCUMENTATION
+================================================================================
+
