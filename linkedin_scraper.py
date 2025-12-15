@@ -183,12 +183,15 @@ class LinkedInScraper:
         """Get all job listings from the current page"""
         jobs = []
         seen_job_ids = set()
+        skipped_duplicates = 0
+        skipped_unknown = 0
+        skipped_no_id = 0
         
         try:
-            # Find all job cards
+            # Find all job cards using multiple selectors
             job_cards = self.driver.find_elements(
                 By.CSS_SELECTOR, 
-                ".job-card-container, .jobs-search-results__list-item, li[data-occludable-job-id]"
+                ".job-card-container, .jobs-search-results__list-item, li[data-occludable-job-id], .scaffold-layout__list-item"
             )
             
             print(f"Found {len(job_cards)} job cards")
@@ -196,14 +199,22 @@ class LinkedInScraper:
             for card in job_cards:
                 try:
                     job_data = self._extract_job_from_card(card)
-                    if job_data and job_data['job_id'] not in seen_job_ids:
-                        # Skip duplicates and unknowns
-                        if job_data['job_title'] != "Unknown":
-                            seen_job_ids.add(job_data['job_id'])
-                            jobs.append(job_data)
+                    if not job_data:
+                        skipped_no_id += 1
+                        continue
+                    if job_data['job_id'] in seen_job_ids:
+                        skipped_duplicates += 1
+                        continue
+                    # Include jobs even with unknown titles
+                    seen_job_ids.add(job_data['job_id'])
+                    jobs.append(job_data)
                 except Exception as e:
                     print(f"Error extracting job from card: {e}")
                     continue
+            
+            print(f"  - Valid jobs: {len(jobs)}")
+            print(f"  - Skipped duplicates: {skipped_duplicates}")
+            print(f"  - Skipped (no ID): {skipped_no_id}")
                     
         except Exception as e:
             print(f"Error getting job listings: {e}")
@@ -241,14 +252,19 @@ class LinkedInScraper:
             job_data["job_id"] = job_id
             job_data["link"] = f"https://www.linkedin.com/jobs/view/{job_id}"
             
-            # Get job title - try multiple selectors
+            # Get job title - try multiple selectors (ordered by specificity)
             title_selectors = [
+                ".job-card-list__title strong",
                 ".job-card-list__title",
+                ".artdeco-entity-lockup__title strong",
                 ".artdeco-entity-lockup__title",
                 "a.job-card-list__title--link strong",
                 ".job-card-container__link strong",
+                ".jobs-unified-top-card__job-title",
+                "h3 a",
+                "h3",
+                "a[href*='/jobs/view/']",
                 "strong",
-                "a[href*='/jobs/view/'] span",
             ]
             
             job_title = "Unknown"
@@ -256,9 +272,12 @@ class LinkedInScraper:
                 try:
                     title_elem = card.find_element(By.CSS_SELECTOR, selector)
                     text = title_elem.text.strip()
-                    if text and text != "Unknown" and len(text) > 2:
-                        job_title = text.split('\n')[0]  # Take first line only
-                        break
+                    # Filter out non-title text (company names, locations, etc.)
+                    if text and len(text) > 2 and len(text) < 150:
+                        # Skip if it looks like a location or company badge
+                        if not any(x in text.lower() for x in ['ago', 'promoted', 'easy apply', 'applicants']):
+                            job_title = text.split('\n')[0].strip()  # Take first line only
+                            break
                 except:
                     continue
             
@@ -276,27 +295,77 @@ class LinkedInScraper:
     def get_job_details(self, job_id):
         """Click on a job and extract detailed information including years of experience"""
         try:
-            # Find and click the job card
-            job_card = self.driver.find_element(By.CSS_SELECTOR, f"[data-job-id='{job_id}']")
-            job_card.click()
-            time.sleep(2)
+            # Try multiple ways to find and click the job card
+            job_card = None
+            selectors = [
+                f"[data-job-id='{job_id}']",
+                f"[data-occludable-job-id='{job_id}']",
+                f"a[href*='/jobs/view/{job_id}']",
+            ]
+            
+            for selector in selectors:
+                try:
+                    job_card = self.driver.find_element(By.CSS_SELECTOR, selector)
+                    break
+                except:
+                    continue
+            
+            if job_card:
+                job_card.click()
+                time.sleep(2)
+            else:
+                # Navigate directly to the job page
+                self.driver.get(f"https://www.linkedin.com/jobs/view/{job_id}")
+                time.sleep(3)
             
             # Wait for job details to load
             self.wait.until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, ".jobs-description, .job-view-layout"))
+                EC.presence_of_element_located((By.CSS_SELECTOR, ".jobs-description, .job-view-layout, .jobs-unified-top-card"))
             )
             
             # Get job description
-            try:
-                description_elem = self.driver.find_element(By.CSS_SELECTOR, ".jobs-description__content, .jobs-box__html-content")
-                description = description_elem.text
-                return description
-            except:
-                return ""
+            description = ""
+            desc_selectors = [
+                ".jobs-description__content",
+                ".jobs-box__html-content",
+                ".jobs-description",
+                "#job-details",
+            ]
+            
+            for selector in desc_selectors:
+                try:
+                    description_elem = self.driver.find_element(By.CSS_SELECTOR, selector)
+                    description = description_elem.text
+                    if description:
+                        break
+                except:
+                    continue
+            
+            return description
                 
         except Exception as e:
             print(f"Error getting job details for {job_id}: {e}")
             return ""
+    
+    def get_job_title_from_page(self):
+        """Extract job title from the currently open job page"""
+        title_selectors = [
+            ".jobs-unified-top-card__job-title",
+            ".job-details-jobs-unified-top-card__job-title",
+            "h1.t-24",
+            "h1",
+        ]
+        
+        for selector in title_selectors:
+            try:
+                title_elem = self.driver.find_element(By.CSS_SELECTOR, selector)
+                title = title_elem.text.strip()
+                if title and len(title) > 2:
+                    return title
+            except:
+                continue
+        
+        return None
     
     def close(self):
         """Close the browser"""

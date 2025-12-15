@@ -60,6 +60,13 @@ def main(job_title="software developer", time_seconds=3600):
             if description:
                 job['required_years'] = extract_required_years(description)
             
+            # If title is Unknown, try to get it from the job page
+            if job.get('job_title') == 'Unknown':
+                page_title = scraper.get_job_title_from_page()
+                if page_title:
+                    job['job_title'] = page_title
+                    print(f"    -> Found title: {page_title}")
+            
             jobs.append(job)
             
             # Small delay to avoid rate limiting
