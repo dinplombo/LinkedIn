@@ -6,7 +6,7 @@ import json
 import time
 import argparse
 from linkedin_scraper import LinkedInScraper
-from job_parser import extract_required_years, parse_job_data
+from job_parser import extract_required_years
 
 
 def main(job_title="software developer", time_seconds=3600):

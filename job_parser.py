@@ -58,55 +58,6 @@ def extract_required_years(description):
     return "Not specified"
 
 
-def parse_job_id_from_url(url):
-    """
-    Extract job ID from LinkedIn job URL.
-    
-    Example: https://www.linkedin.com/jobs/view/3756432198 -> 3756432198
-    """
-    if not url:
-        return None
-    
-    # Pattern to match job ID in URL
-    patterns = [
-        r'/jobs/view/(\d+)',
-        r'currentJobId=(\d+)',
-        r'jobId=(\d+)',
-    ]
-    
-    for pattern in patterns:
-        match = re.search(pattern, url)
-        if match:
-            return match.group(1)
-    
-    return None
-
-
-def build_job_link(job_id):
-    """Build the full LinkedIn job link from job ID"""
-    return f"https://www.linkedin.com/jobs/view/{job_id}"
-
-
-def parse_job_data(job_id, job_title, description=None):
-    """
-    Parse and structure job data.
-    
-    Args:
-        job_id: The LinkedIn job ID
-        job_title: The job title
-        description: Optional job description text
-        
-    Returns:
-        Dictionary with job_id, link, job_title, required_years
-    """
-    return {
-        "job_id": str(job_id),
-        "link": build_job_link(job_id),
-        "job_title": job_title.strip() if job_title else "Unknown",
-        "required_years": extract_required_years(description)
-    }
-
-
 # Test the parser
 if __name__ == "__main__":
     # Test cases for extract_required_years
